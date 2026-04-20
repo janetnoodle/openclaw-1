@@ -856,9 +856,11 @@ describe("dispatchReplyFromConfig", () => {
       dispatcher,
       replyResolver,
       replyOptions: {
-        internalStartTypingOnAccept: true,
-        internalTypingController: {
-          startTypingLoop,
+        earlyTyping: {
+          start: "accepted_inbound",
+          controller: {
+            startTypingLoop,
+          } as never,
         },
       } as GetReplyOptions,
     });
@@ -888,9 +890,11 @@ describe("dispatchReplyFromConfig", () => {
       dispatcher,
       replyResolver,
       replyOptions: {
-        internalStartTypingOnAccept: true,
-        internalTypingController: {
-          startTypingLoop,
+        earlyTyping: {
+          start: "accepted_inbound",
+          controller: {
+            startTypingLoop,
+          } as never,
         },
       } as GetReplyOptions,
     });
@@ -927,9 +931,11 @@ describe("dispatchReplyFromConfig", () => {
       dispatcher,
       replyResolver,
       replyOptions: {
-        internalStartTypingOnAccept: true,
-        internalTypingController: {
-          startTypingLoop,
+        earlyTyping: {
+          start: "accepted_inbound",
+          controller: {
+            startTypingLoop,
+          } as never,
         },
       } as GetReplyOptions,
     });
@@ -3317,9 +3323,11 @@ describe("sendPolicy deny — suppress delivery, not processing (#53328)", () =>
       dispatcher,
       replyResolver,
       replyOptions: {
-        internalStartTypingOnAccept: true,
-        internalTypingController: {
-          startTypingLoop,
+        earlyTyping: {
+          start: "accepted_inbound",
+          controller: {
+            startTypingLoop,
+          } as never,
         },
       } as GetReplyOptions,
     });

@@ -67,28 +67,27 @@ export type ReplyDispatcherWithTypingOptions = Omit<ReplyDispatcherOptions, "onI
   onIdle?: () => void;
   /** Called when the typing controller is cleaned up (e.g., on NO_REPLY). */
   onCleanup?: () => void;
+  /** Optional early-typing policy for accepted inbound turns. */
+  earlyTyping?: ReplyDispatcherEarlyTypingOptions;
 };
 
-type InternalReplyDispatcherWithTypingOptions = ReplyDispatcherWithTypingOptions & {
+export type ReplyDispatcherEarlyTypingOptions = {
   /**
-   * Internal-only flag used by WhatsApp to start composing as soon as inbound
-   * gating accepts the message, before reply hooks and lazy runtime bootstrap.
+   * Start typing as soon as the inbound message is accepted for reply
+   * processing, before reply hooks and lazy runtime bootstrap.
    */
-  startTypingOnAccept?: boolean;
+  start: "accepted_inbound";
   typingIntervalSeconds?: number;
 };
 
-type InternalTypingReplyOptions = Pick<
+type TypingReplyOptions = Pick<
   GetReplyOptions,
-  "onReplyStart" | "onTypingController" | "onTypingCleanup"
-> & {
-  internalTypingController?: TypingController;
-  internalStartTypingOnAccept?: boolean;
-};
+  "onReplyStart" | "onTypingController" | "onTypingCleanup" | "earlyTyping"
+>;
 
 type ReplyDispatcherWithTypingResult = {
   dispatcher: ReplyDispatcher;
-  replyOptions: InternalTypingReplyOptions;
+  replyOptions: TypingReplyOptions;
   markDispatchIdle: () => void;
   /** Signal that the model run is complete so the typing controller can stop. */
   markRunComplete: () => void;
@@ -238,18 +237,17 @@ export function createReplyDispatcher(options: ReplyDispatcherOptions): ReplyDis
 export function createReplyDispatcherWithTyping(
   options: ReplyDispatcherWithTypingOptions,
 ): ReplyDispatcherWithTypingResult {
-  const internalOptions = options as InternalReplyDispatcherWithTypingOptions;
-  const { typingCallbacks, onReplyStart, onIdle, onCleanup, ...dispatcherOptions } =
-    internalOptions;
+  const { typingCallbacks, onReplyStart, onIdle, onCleanup, earlyTyping, ...dispatcherOptions } =
+    options;
   const resolvedOnReplyStart = onReplyStart ?? typingCallbacks?.onReplyStart;
   const resolvedOnIdle = onIdle ?? typingCallbacks?.onIdle;
   const resolvedOnCleanup = onCleanup ?? typingCallbacks?.onCleanup;
-  const shouldStartTypingOnAccept = internalOptions.startTypingOnAccept === true;
+  const shouldStartTypingOnAccept = earlyTyping?.start === "accepted_inbound";
   let typingController: TypingController | undefined = shouldStartTypingOnAccept
     ? createTypingController({
         onReplyStart: resolvedOnReplyStart,
         onCleanup: resolvedOnCleanup,
-        typingIntervalSeconds: internalOptions.typingIntervalSeconds,
+        typingIntervalSeconds: earlyTyping?.typingIntervalSeconds,
         log: defaultRuntime.log,
       })
     : undefined;
@@ -277,8 +275,12 @@ export function createReplyDispatcherWithTyping(
           return;
         }
       },
-      internalTypingController: typingController,
-      internalStartTypingOnAccept: shouldStartTypingOnAccept,
+      earlyTyping: typingController
+        ? {
+            start: "accepted_inbound",
+            controller: typingController,
+          }
+        : undefined,
     },
     markDispatchIdle: () => {
       typingController?.markDispatchIdle();

@@ -69,9 +69,9 @@ import type {
   DispatchFromConfigResult,
 } from "./dispatch-from-config.types.js";
 import { claimInboundDedupe, commitInboundDedupe, releaseInboundDedupe } from "./inbound-dedupe.js";
+import { resolveInboundReplyAdmission } from "./inbound-reply-admission.js";
 import { resolveReplyRoutingDecision } from "./routing-policy.js";
 import { resolveRunTypingPolicy } from "./typing-policy.js";
-import { isSilentUnauthorizedWholeMessageControlCommand } from "./unauthorized-control-command.js";
 
 let routeReplyRuntimePromise: Promise<typeof import("./route-reply.runtime.js")> | null = null;
 let getReplyFromConfigRuntimePromise: Promise<
@@ -106,13 +106,6 @@ function loadReplyMediaPathsRuntime() {
   replyMediaPathsRuntimePromise ??= import("./reply-media-paths.runtime.js");
   return replyMediaPathsRuntimePromise;
 }
-
-type InternalDispatchReplyOptions = DispatchFromConfigParams["replyOptions"] & {
-  internalTypingController?: {
-    startTypingLoop: () => Promise<void>;
-  };
-  internalStartTypingOnAccept?: boolean;
-};
 
 async function maybeApplyTtsToReplyPayload(
   params: Parameters<Awaited<ReturnType<typeof loadTtsRuntime>>["maybeApplyTtsToPayload"]>[0],
@@ -888,25 +881,26 @@ export async function dispatchReplyFromConfig(
       originatingChannel,
       systemEvent: shouldRouteToOriginating,
     });
-    const internalReplyOptions = params.replyOptions as InternalDispatchReplyOptions | undefined;
     const commandAuthorized = ctx.CommandAuthorized;
-    if (
-      internalReplyOptions?.internalStartTypingOnAccept &&
-      !typing.suppressTyping &&
-      !isSilentUnauthorizedWholeMessageControlCommand({
-        ctx,
+    const inboundAdmission = resolveInboundReplyAdmission({
+      ctx,
+      cfg,
+      sendPolicy,
+      allowTextCommands: shouldHandleTextCommands({
         cfg,
-        allowTextCommands: shouldHandleTextCommands({
-          cfg,
-          surface: normalizeLowercaseStringOrEmpty(ctx.Surface ?? ctx.Provider),
-          commandSource: ctx.CommandSource,
-        }),
-        commandAuthorized,
-        agentId: sessionAgentId,
-        includeDisabledCommands: true,
-      })
+        surface: normalizeLowercaseStringOrEmpty(ctx.Surface ?? ctx.Provider),
+        commandSource: ctx.CommandSource,
+      }),
+      commandAuthorized,
+      agentId: sessionAgentId,
+      includeDisabledCommands: true,
+    });
+    if (
+      params.replyOptions?.earlyTyping?.start === "accepted_inbound" &&
+      !typing.suppressTyping &&
+      inboundAdmission.shouldStartEarlyTyping
     ) {
-      await internalReplyOptions.internalTypingController?.startTypingLoop();
+      await params.replyOptions.earlyTyping.controller?.startTypingLoop();
     }
 
     const replyResolver =

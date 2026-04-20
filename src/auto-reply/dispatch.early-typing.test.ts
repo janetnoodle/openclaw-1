@@ -1,13 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createReplyDispatcherWithTyping } from "./reply/reply-dispatcher.js";
 
-type InternalReplyOptions = {
-  internalTypingController?: {
-    startTypingLoop: () => Promise<void>;
-  };
-  internalStartTypingOnAccept?: boolean;
-};
-
 describe("reply dispatcher early typing", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -17,22 +10,19 @@ describe("reply dispatcher early typing", () => {
     const optedIn = createReplyDispatcherWithTyping({
       deliver: async () => undefined,
       onReplyStart: async () => undefined,
-      startTypingOnAccept: true,
-      typingIntervalSeconds: 1,
-    } as never);
+      earlyTyping: {
+        start: "accepted_inbound",
+        typingIntervalSeconds: 1,
+      },
+    });
     const defaultPath = createReplyDispatcherWithTyping({
       deliver: async () => undefined,
       onReplyStart: async () => undefined,
     });
 
-    expect((optedIn.replyOptions as InternalReplyOptions).internalTypingController).toBeDefined();
-    expect((optedIn.replyOptions as InternalReplyOptions).internalStartTypingOnAccept).toBe(true);
-    expect(
-      (defaultPath.replyOptions as InternalReplyOptions).internalTypingController,
-    ).toBeUndefined();
-    expect((defaultPath.replyOptions as InternalReplyOptions).internalStartTypingOnAccept).toBe(
-      false,
-    );
+    expect(optedIn.replyOptions.earlyTyping?.controller).toBeDefined();
+    expect(optedIn.replyOptions.earlyTyping?.start).toBe("accepted_inbound");
+    expect(defaultPath.replyOptions.earlyTyping).toBeUndefined();
   });
 
   it("uses the configured typing interval for eager early-typing controllers", async () => {
@@ -41,11 +31,13 @@ describe("reply dispatcher early typing", () => {
     const { replyOptions, markRunComplete, markDispatchIdle } = createReplyDispatcherWithTyping({
       deliver: async () => undefined,
       onReplyStart,
-      startTypingOnAccept: true,
-      typingIntervalSeconds: 1,
-    } as never);
+      earlyTyping: {
+        start: "accepted_inbound",
+        typingIntervalSeconds: 1,
+      },
+    });
 
-    const typing = (replyOptions as InternalReplyOptions).internalTypingController;
+    const typing = replyOptions.earlyTyping?.controller;
     expect(typing).toBeDefined();
 
     await typing?.startTypingLoop();

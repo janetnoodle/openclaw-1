@@ -272,8 +272,10 @@ export async function dispatchWhatsAppBufferedReply(params: {
     ...params.replyPipeline,
     // WhatsApp UX is especially sensitive to cold-start silence. Start
     // composing as soon as this inbound message has passed channel gating.
-    startTypingOnAccept: true,
-    typingIntervalSeconds: resolveWhatsAppTypingIntervalSeconds(params.cfg),
+    earlyTyping: {
+      start: "accepted_inbound" as const,
+      typingIntervalSeconds: resolveWhatsAppTypingIntervalSeconds(params.cfg),
+    },
     onHeartbeatStrip: () => {
       if (!didLogHeartbeatStrip) {
         didLogHeartbeatStrip = true;

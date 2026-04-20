@@ -17,10 +17,6 @@ import type { GetReplyOptions } from "./types.js";
 export type DispatchInboundResult = DispatchFromConfigResult;
 export { withReplyDispatcher } from "./dispatch-dispatcher.js";
 
-type InternalDispatchReplyOptions = Omit<GetReplyOptions, "onToolResult" | "onBlockReply"> & {
-  internalStartTypingOnAccept?: boolean;
-};
-
 export async function dispatchInboundMessage(params: {
   ctx: MsgContext | FinalizedMsgContext;
   cfg: OpenClawConfig;
@@ -51,7 +47,6 @@ export async function dispatchInboundMessageWithBufferedDispatcher(params: {
 }): Promise<DispatchInboundResult> {
   const { dispatcher, replyOptions, markDispatchIdle, markRunComplete } =
     createReplyDispatcherWithTyping(params.dispatcherOptions);
-  const internalReplyOptions = replyOptions as InternalDispatchReplyOptions;
   try {
     return await dispatchInboundMessage({
       ctx: params.ctx,
@@ -60,7 +55,7 @@ export async function dispatchInboundMessageWithBufferedDispatcher(params: {
       replyResolver: params.replyResolver,
       replyOptions: {
         ...params.replyOptions,
-        ...internalReplyOptions,
+        ...replyOptions,
       },
     });
   } finally {

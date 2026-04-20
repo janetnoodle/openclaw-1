@@ -1,10 +1,7 @@
 import { resolveAccountEntry } from "openclaw/plugin-sdk/account-core";
 import { resolveInboundDebounceMs } from "openclaw/plugin-sdk/channel-inbound";
 import { formatCliCommand } from "openclaw/plugin-sdk/cli-runtime";
-import {
-  normalizeCommandBody,
-  resolveCommandAuthorization,
-} from "openclaw/plugin-sdk/command-auth";
+import { shouldHandleTextCommands } from "openclaw/plugin-sdk/command-auth";
 import { hasControlCommand } from "openclaw/plugin-sdk/command-detection";
 import {
   loadSessionStore,
@@ -15,6 +12,7 @@ import {
 import { drainPendingDeliveries } from "openclaw/plugin-sdk/infra-runtime";
 import { enqueueSystemEvent } from "openclaw/plugin-sdk/infra-runtime";
 import { DEFAULT_GROUP_HISTORY_LIMIT } from "openclaw/plugin-sdk/reply-history";
+import { resolveInboundReplyAdmission } from "openclaw/plugin-sdk/reply-runtime";
 import { resolveAgentRoute } from "openclaw/plugin-sdk/routing";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { registerUnhandledRejectionHandler } from "openclaw/plugin-sdk/runtime-env";
@@ -117,9 +115,6 @@ async function shouldStartWhatsAppDebounceTyping(params: {
   msg: WebInboundMsg;
   echoHas: (key: string) => boolean;
 }): Promise<boolean> {
-  if (params.echoHas(params.msg.body)) {
-    return false;
-  }
   const cfg = params.cfg;
   const peerId = resolvePeerId(params.msg);
   const route = resolveAgentRoute({
@@ -146,14 +141,6 @@ async function shouldStartWhatsAppDebounceTyping(params: {
     channel: sessionStoreEntry.existing?.channel ?? "whatsapp",
     chatType: sessionStoreEntry.existing?.chatType ?? "direct",
   });
-  if (sendPolicy === "deny") {
-    return false;
-  }
-
-  const rawBodyTrimmed = params.msg.body.trim();
-  if (!rawBodyTrimmed) {
-    return true;
-  }
 
   const inboundPolicy = resolveWhatsAppInboundPolicy({
     cfg,
@@ -168,17 +155,7 @@ async function shouldStartWhatsAppDebounceTyping(params: {
       })
     : true;
   const sender = getSenderIdentity(params.msg);
-  const normalizedCommandBody = normalizeCommandBody(rawBodyTrimmed).trim();
-  const isWholeMessageCommand =
-    normalizedCommandBody === rawBodyTrimmed ||
-    normalizedCommandBody === rawBodyTrimmed.toLowerCase();
-  const isResetOrNewCommand = /^\/(new|reset)(?:\s|$)/.test(normalizedCommandBody);
-  const isRecognizedControlCommand = hasControlCommand(rawBodyTrimmed);
-  if (!isWholeMessageCommand || (!isRecognizedControlCommand && !isResetOrNewCommand)) {
-    return true;
-  }
-
-  const commandAuth = resolveCommandAuthorization({
+  const admission = resolveInboundReplyAdmission({
     ctx: {
       AccountId: route.accountId,
       Body: params.msg.body,
@@ -195,9 +172,17 @@ async function shouldStartWhatsAppDebounceTyping(params: {
       OriginatingTo: params.msg.from,
     },
     cfg,
+    sendPolicy,
+    allowTextCommands: shouldHandleTextCommands({
+      cfg,
+      surface: "whatsapp",
+    }),
     commandAuthorized,
+    agentId: route.agentId,
+    echoDetected: params.echoHas(params.msg.body),
+    includeDisabledCommands: true,
   });
-  return commandAuthorized && commandAuth.isAuthorizedSender;
+  return admission.shouldStartEarlyTyping;
 }
 
 export async function monitorWebChannel(
